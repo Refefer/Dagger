@@ -29,22 +29,25 @@ def train(X, y):
 def main(fn, sp):
     print "Reading in dataset"
     data, classes = readDataset(fn)
+    print len(data), " sequences found"
+    print "Found classes:", sorted(classes)
     proc = Processor(classes, 2, 2, ohe=False)
 
     print "Converting to features"
     Xs, ys = [], []
     for d in data:
         X, y = [], []
+        trad = [x['output'] for x in d]
         for i in xrange(len(d)):
-            X.append(proc.transform(d, i))
-            y.append(proc.encode_target(d, i))
+            X.append(proc.transform(d, trad, i))
+            y.append(proc.encode_target(trad, i))
 
         Xs.append(X)
         ys.append(y)
 
     print "Starting KFolding"
     y_trues, y_preds = [], []
-    for train_idx, test_idx in KFold(len(data), 10):
+    for train_idx, test_idx in KFold(len(data), 3, random_state=1):
         tr_X, tr_y = build(Xs, ys, train_idx)
         print "Training"
         clf = train(tr_X, tr_y)
@@ -52,16 +55,24 @@ def main(fn, sp):
         seq = Sequencer(proc, clf)
 
         print "Testing"
-        y_true, y_pred = [], []
-        for idx in test_idx:
-            y_true.extend(y for yi in ys[idx] for y in yi)
-            preds = seq.classify(data[idx])
-            y_pred.extend(preds)
+        y_true, y_pred = test(data, ys, test_idx, seq)
+        print classification_report(y_true, y_pred, target_names=proc.labels)
 
         y_trues.extend(y_true)
         y_preds.extend(y_pred)
     
+    print "Total Report"
     print classification_report(y_trues, y_preds, target_names=proc.labels)
+
+    print "Training all"
+    idxs = range(len(Xs))
+    tr_X, tr_y = build(Xs, ys, idxs)
+    clf = train(tr_X, tr_y)
+    seq = Sequencer(proc, clf)
+
+    print "Testing"
+    y_true, y_pred = test(data, ys, idxs, seq)
+    print classification_report(y_true, y_pred, target_names=proc.labels)
 
     save(sp, seq)
 
