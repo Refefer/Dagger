@@ -25,10 +25,11 @@ class ExpPolicy(Policy):
 
 class Processor(object):
 
-    def __init__(self, classes, previous=1, following=1, features=15000, ohe=True):
+    def __init__(self, classes, previous=1, following=1, features=15000, stem=True, ohe=True):
         self.previous = previous
         self.following = following 
-        self.es = es = nltk.stem.snowball.EnglishStemmer()
+        self.stem = stem
+        self.es = nltk.stem.snowball.EnglishStemmer()
         self.fh = FeatureHasher(features, input_type='string', dtype='float32')
         self.labels = list(classes)
         self.classes = {c: i for i, c in enumerate(self.labels)}
@@ -41,11 +42,16 @@ class Processor(object):
         return self._nident[self.classes[y]]
 
     def _get_feat(self, prefix, f):
-        feat = f['feature']
-        return [
-            prefix % feat,
-            's' + prefix % self.es.stem(feat)
-        ]
+        ret = [prefix % f['feature']]
+        if self.stem:
+            try:
+                stem = self.es.stem(feat)
+            except Exception:
+                stem = ''
+
+            ret.append('s' + prefix % stem)
+
+        return ret
 
     def transform(self, sequence, trad, idx, verbose=False):
         features = []
@@ -68,8 +74,7 @@ class Processor(object):
             features.extend(self._get_feat('f_feat_%s:%%s' % i,  f))
 
         # Print current features
-        cur_f = sequence[idx]
-        features.extend(self._get_feat('feat:%s', cur_f))
+        features.extend(self._get_feat('feat:%s', sequence[idx]))
 
         if verbose:
             print features

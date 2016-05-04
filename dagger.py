@@ -7,6 +7,7 @@ import numpy as np
 import scipy.sparse as sp
 
 from sklearn.linear_model import SGDClassifier
+from sklearn.svm import LinearSVC
 
 from sklearn.metrics import classification_report
 from sklearn.cross_validation import KFold
@@ -65,14 +66,13 @@ def train(Xss, yss, proc, epochs=30):
     ntradss = yss[:]
 
     # Initial policy just mimics the expert
-    clf = train_model(Xss, yss, yss, proc, cache)
+    clf, uniques = train_model(Xss, yss, yss, proc, cache)
 
     for i in xrange(1, epochs):
         sequencer = Sequencer(proc, clf)
 
         # Generate new dataset
         print "Generating new dataset"
-        uniques = len(cache) 
         nX, nY, nT = gen_dataset(Xss, yss, proc, clf, i)
         nXss.extend(nX)
         nyss.extend(nY)
@@ -80,10 +80,11 @@ def train(Xss, yss, proc, epochs=30):
 
         # Retrain
         print "Retraining"
-        clf = train_model(nXss, nyss, ntradss, proc, cache)
+        oUnique = uniques
+        clf, uniques = train_model(nXss, nyss, ntradss, proc, cache)
 
         # No new data - exit
-        if len(cache) == uniques:
+        if oUnique == uniques:
             break
 
     return clf
@@ -96,24 +97,43 @@ def build_training_data(Xss, yss, tradss, proc, cache):
     seen = set()
     n = c = 0
     print "Cache size:", len(cache), len(Xss)
-    for Xs, ys, trads in izip(Xss, yss, tradss):
+    for cidx, (Xs, ys, trads) in enumerate(izip(Xss, yss, tradss)):
         n += 1
-        ci = cache_key(Xs, ys, trads)
-        if ci not in cache:
-            c += 1
-            feats, targets = [], []
-            for i in xrange(len(Xs)):
-                X = proc.transform(Xs, trads, i)
-                feats.append(X)
-                targets.append(proc.encode_target(ys, i)[0])
-            
-            cache[ci] = (feats, targets)
 
-        for X, y in izip(*cache[ci]):
-            k = key(X, y)
-            if k not in seen:
-                seen.add(k)
-                yield X, y
+        # Don't judge me
+        if cidx in cache:
+            v = cache[cidx]
+        else:
+            ci = cache_key(Xs, ys, trads)
+            if ci not in cache:
+                c += 1
+                feats, targets = [], []
+                for i in xrange(len(Xs)):
+                    X = proc.transform(Xs, trads, i)
+                    feats.append(X)
+                    targets.append(proc.encode_target(ys, i)[0])
+                
+                cache[ci] = (feats, targets)
+                cache[cidx] = (feats, targets)
+
+            v = cache[ci]
+
+        # Positive means unique to this point
+        for si, (X, y) in enumerate(izip(*v)):
+            skey = (cidx, si)
+            if skey in cache:
+                unique, hkey = cache[skey]
+                if unique:
+                    yield X, y
+                    seen.add(hkey)
+            else:
+                k = key(X, y)
+                unique = k not in seen
+                if unique:
+                    seen.add(k)
+                    yield X, y
+
+                cache[skey] = (unique, k)
 
     print "Cache Hit:", (n - c) / float(n)
 
@@ -127,10 +147,11 @@ def train_model(Xss, yss, trads, proc, cache):
     tX, tY = sp.vstack(tX), np.vstack(tY)
 
     print "Running learner..."
-    clf = SGDClassifier(loss="hinge", penalty="l2", n_iter=5)
+    clf = SGDClassifier(loss="hinge", penalty="l2", n_iter=1)
+    #clf = LinearSVC()
     print tX.shape, tY.shape
     clf.fit(tX, tY.ravel())
-    return clf
+    return clf, tX.shape[0]
 
 def subset(Xss, yss, idxs):
     random.shuffle(idxs)
@@ -143,7 +164,7 @@ def main(fn, outf):
     data, classes = readDataset(fn)
     print len(data), " sequences found"
     print "Found classes:", sorted(classes)
-    proc = Processor(classes, 2, 2, ohe=False)
+    proc = Processor(classes, 2, 2, features=100000, ohe=False)
 
     yss = []
     ryss = []

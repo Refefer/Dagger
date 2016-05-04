@@ -6,6 +6,7 @@ import numpy as np
 import scipy.sparse as sp
 
 from sklearn.linear_model import SGDClassifier
+from sklearn.svm import LinearSVC
 
 from sklearn.metrics import classification_report
 from sklearn.cross_validation import KFold
@@ -22,7 +23,8 @@ def build(Xs, ys, idxs):
     return sp.vstack(X), np.vstack(y)
 
 def train(X, y):
-    clf = SGDClassifier(loss="hinge", penalty="l2", n_iter=5)
+    #clf = SGDClassifier(loss="hinge", penalty="l2", n_iter=5)
+    clf = LinearSVC(penalty="l2", verbose=2)
     clf.fit(X, y.ravel())
     return clf
 
@@ -31,11 +33,14 @@ def main(fn, sp):
     data, classes = readDataset(fn)
     print len(data), " sequences found"
     print "Found classes:", sorted(classes)
-    proc = Processor(classes, 2, 2, ohe=False)
+    proc = Processor(classes, 2, 2, features=100000, stem=False, ohe=False)
 
     print "Converting to features"
     Xs, ys = [], []
-    for d in data:
+    for i, d in enumerate(data):
+        if i % 100 == 0:
+            print "Converted %s of %s" % (i, len(data))
+
         X, y = [], []
         trad = [x['output'] for x in d]
         for i in xrange(len(d)):
