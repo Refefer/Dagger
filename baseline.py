@@ -24,8 +24,8 @@ def build(Xs, ys, idxs):
     return sp.vstack(X), np.vstack(y)
 
 def train(X, y):
-    #clf = SGDClassifier(loss="hinge", penalty="l2", n_iter=30)
-    clf = LinearSVC(penalty="l2")
+    clf = SGDClassifier(loss="hinge", penalty="l2", n_iter=5)
+    #clf = LinearSVC(penalty="l2", class_weight='auto')
     clf.fit(X, y.ravel())
     return clf
 
@@ -34,7 +34,8 @@ def main(fn, sp):
     data, classes = readDataset(fn)
     print len(data), " sequences found"
     print "Found classes:", sorted(classes)
-    proc = Processor(classes, 3, 1, features=100000, stem=False, ohe=False)
+    proc = Processor(classes, 2, 2, prefix=(1,3), affix=(2,1), hashes=2,
+            features=100000, stem=False, ohe=False)
 
     print "Converting to features"
     Xs, ys = [], []
@@ -54,7 +55,7 @@ def main(fn, sp):
 
     print "Starting KFolding"
     y_trues, y_preds = [], []
-    for train_idx, test_idx in KFold(len(data), 5, random_state=1):
+    for train_idx, test_idx in KFold(len(data), 3, random_state=1):
         tr_X, tr_y = build(Xs, ys, train_idx)
         print "Training"
         clf = train(tr_X, tr_y)

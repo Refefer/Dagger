@@ -8,6 +8,7 @@ import scipy.sparse as sp
 
 from sklearn.linear_model import SGDClassifier
 from sklearn.svm import LinearSVC, SVC
+from sklearn.neighbors import DistanceMetric
 
 from sklearn.metrics import classification_report
 from sklearn.cross_validation import KFold, ShuffleSplit
@@ -15,12 +16,30 @@ from sklearn.cross_validation import KFold, ShuffleSplit
 from utils import *
 
 class Dagger(object):
-    def __init__(self, Xss, yss, proc):
-        self.Xss = Xss
-        self.yss = yss
+    def __init__(self, proc, Xss, yss, valid_set=0.1):
         self.seen_states = set()
         self.state_set = []
         self.proc = proc
+        self.valid_set = 0.1
+        self.surr_loss = DistanceMetric.get_metric('hamming')
+
+        self._split(Xss, yss)
+
+    def _split(self, Xss, yss):
+        train_Xss, test_Xss = [], []
+        train_yss, test_yss = [], []
+        for Xs, ys in izip(Xss, yss):
+            if np.random.binomial(1, 1 - self.valid_set) == 1:
+                train_Xss.append(Xs)
+                train_yss.append(ys)
+            else:
+                test_Xss.append(Xs)
+                test_yss.append(ys)
+
+        self.Xss = train_Xss
+        self.yss = train_yss
+        self.test_Xss = test_Xss
+        self.test_yss = test_yss
 
     def generate(self, Xs, ys, exp, sequencer):
         """
@@ -65,6 +84,16 @@ class Dagger(object):
     def get_state(self, Xs, trad, idx):
         return ' '.join(self.proc.state(Xs, trad, idx))
 
+    def score_policy(self, clf):
+        sequencer = Sequencer(self.proc, clf)
+        scores = []
+        for Xs, ys in izip(self.test_Xss, self.test_yss):
+            trads = [i for i in sequencer.classify(Xs, raw=True)]
+            expected = [self.proc.encode_target(ys, i)[0] for i in xrange(len(ys))]
+            scores.append(self.surr_loss.pairwise([trads], [expected]))
+
+        return np.mean(scores)
+
     def train(self, epochs=30):
 
         # Add to the initial set
@@ -73,10 +102,15 @@ class Dagger(object):
             states += len(ys)
             self.add_sequence(Xs, ys, ys, force=True)
 
-        print len(self.state_set), "unique,", states, "total"
+        print len(self.seen_states), "unique,", states, "total"
         
         # Initial policy just mimics the expert
         clf = self.train_model()
+
+        # Get best policy found so far
+        bscore, bclf= self.score_policy(clf), clf
+
+        print "Best score seen:",  bscore
 
         for e in xrange(1, epochs):
 
@@ -92,7 +126,14 @@ class Dagger(object):
             print "Training"
             clf = self.train_model()
 
-        return clf
+            print "Scoring"
+            score = self.score_policy(clf)
+            if score < bscore:
+                bscore = score
+                bclf = clf
+                print "Best score seen:",  bscore
+
+        return bclf
 
     def train_model(self):
         print "Featurizing..."
@@ -104,8 +145,8 @@ class Dagger(object):
         tX, tY = sp.vstack(tX), np.vstack(tY)
 
         print "Running learner..."
-        #clf = SGDClassifier(loss="hinge", penalty="l2", n_iter=30)
-        clf = LinearSVC(penalty='l2')
+        clf = SGDClassifier(loss="hinge", penalty="l2", n_iter=5)
+        #clf = LinearSVC(penalty="l2", class_weight='auto')
         print "Samples:", tX.shape[0]
         clf.fit(tX, tY.ravel())
         return clf
@@ -121,7 +162,8 @@ def main(fn, outf):
     data, classes = readDataset(fn)
     print len(data), " sequences found"
     print "Found classes:", sorted(classes)
-    proc = Processor(classes, 3, 1, features=100000, stem=False, ohe=False)
+    proc = Processor(classes, 2, 2, prefix=(1,3), affix=(2,1), hashes=2,
+            features=100000, stem=False, ohe=False)
 
     yss = []
     ryss = []
@@ -132,10 +174,10 @@ def main(fn, outf):
 
     print "Starting KFolding"
     y_trues, y_preds = [], []
-    for train_idx, test_idx in KFold(len(data), 5, random_state=1):
+    for train_idx, test_idx in KFold(len(data), 3, random_state=1):
         tr_X, tr_y = subset(data, yss, train_idx)
         print "Training"
-        d = Dagger(tr_X, tr_y, proc)
+        d = Dagger(proc, tr_X, tr_y)
         clf = d.train(10)
 
         seq = Sequencer(proc, clf)
@@ -153,7 +195,7 @@ def main(fn, outf):
     print "Training all"
     idxs = range(len(data))
     tr_X, tr_y = subset(data, yss, idxs)
-    d = Dagger(tr_X, tr_y, proc)
+    d = Dagger(proc, tr_X, tr_y)
     clf = d.train()
     seq = Sequencer(proc, clf)
 
@@ -161,4 +203,5 @@ def main(fn, outf):
 
 if __name__ == '__main__':
     random.seed(0)
+    np.random.seed(0)
     main(sys.argv[1], sys.argv[2])

@@ -28,9 +28,14 @@ class ExpPolicy(Policy):
 
 class Processor(object):
 
-    def __init__(self, classes, previous=1, following=1, features=15000, stem=True, ohe=True):
+    def __init__(self, classes, previous=1, following=1, 
+            features=15000, prefix=(), affix=(), 
+            hashes=1, stem=True, ohe=True):
+        self.hashes = hashes
         self.previous = previous
         self.following = following 
+        self.prefix = prefix
+        self.affix = affix
         self.stem = stem
         self.es = nltk.stem.snowball.EnglishStemmer()
         self.features = features
@@ -46,14 +51,20 @@ class Processor(object):
         return self._nident[self.classes[y]]
 
     def _get_feat(self, prefix, f):
-        ret = [prefix % f['feature']]
+        feat = f['feature']
+        ret = [prefix % feat]
         if self.stem:
-            try:
-                stem = self.es.stem(feat)
-            except Exception:
-                stem = ''
+            stem = self.es.stem(feat)
 
             ret.append('s' + prefix % stem)
+
+        pprefix = 'p_' + prefix
+        for s in self.prefix:
+            ret.append(pprefix % feat[:s])
+
+        affix = 'a_' + prefix
+        for s in self.prefix:
+            ret.append(affix % feat[-s:])
 
         return ret
 
@@ -98,6 +109,13 @@ class Processor(object):
         # Print current features
         features.extend(self._get_feat('feat:%s', Xs[idx]))
 
+        if self.hashes > 1:
+            nhashes = features[:]
+            for i in xrange(1, self.hashes):
+                p = '!' * i
+                nhashes.extend(p+s for s in features)
+
+            hashes = nhashes
         return features
 
     def encode_target(self, ys, idx):
