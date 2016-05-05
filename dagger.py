@@ -16,30 +16,35 @@ from sklearn.cross_validation import KFold, ShuffleSplit
 from utils import *
 
 class Dagger(object):
-    def __init__(self, proc, Xss, yss, valid_set=0.1):
+    def __init__(self, proc, Xss, yss, valid_set=0.1, validation_set=None):
         self.seen_states = set()
         self.state_set = []
         self.proc = proc
         self.valid_set = 0.1
         self.surr_loss = DistanceMetric.get_metric('hamming')
 
-        self._split(Xss, yss)
+        if validation_set is None:
+            self._split(Xss, yss)
+        else:
+            self.Xss = Xss
+            self.yss = yss
+            self.valid_Xss, self.valid_yss = validation_set
 
     def _split(self, Xss, yss):
-        train_Xss, test_Xss = [], []
-        train_yss, test_yss = [], []
+        train_Xss, valid_Xss = [], []
+        train_yss, valid_yss = [], []
         for Xs, ys in izip(Xss, yss):
             if np.random.binomial(1, 1 - self.valid_set) == 1:
                 train_Xss.append(Xs)
                 train_yss.append(ys)
             else:
-                test_Xss.append(Xs)
-                test_yss.append(ys)
+                valid_Xss.append(Xs)
+                valid_yss.append(ys)
 
         self.Xss = train_Xss
         self.yss = train_yss
-        self.test_Xss = test_Xss
-        self.test_yss = test_yss
+        self.valid_Xss = valid_Xss
+        self.valid_yss = valid_yss
 
     def generate(self, Xs, ys, exp, sequencer):
         """
@@ -49,7 +54,7 @@ class Dagger(object):
         trad = []
 
         for i in xrange(len(Xs)):
-            if random.random() < exp:
+            if np.random.random() < exp:
                 # Oracle
                 output = ys[i]
             else:
@@ -87,7 +92,7 @@ class Dagger(object):
     def score_policy(self, clf):
         sequencer = Sequencer(self.proc, clf)
         scores = []
-        for Xs, ys in izip(self.test_Xss, self.test_yss):
+        for Xs, ys in izip(self.valid_Xss, self.valid_yss):
             trads = [i for i in sequencer.classify(Xs, raw=True)]
             expected = [self.proc.encode_target(ys, i)[0] for i in xrange(len(ys))]
             scores.append(self.surr_loss.pairwise([trads], [expected]))
@@ -128,10 +133,11 @@ class Dagger(object):
 
             print "Scoring"
             score = self.score_policy(clf)
+            print "New Policy Score:",  bscore
+
             if score < bscore:
                 bscore = score
                 bclf = clf
-                print "Best score seen:",  bscore
 
         return bclf
 
@@ -145,14 +151,17 @@ class Dagger(object):
         tX, tY = sp.vstack(tX), np.vstack(tY)
 
         print "Running learner..."
-        clf = SGDClassifier(loss="hinge", penalty="l2", n_iter=5)
+        clf = SGDClassifier(loss="hinge", penalty="l2", n_iter=10)
         #clf = LinearSVC(penalty="l2", class_weight='auto')
         print "Samples:", tX.shape[0]
         clf.fit(tX, tY.ravel())
         return clf
 
-def subset(Xss, yss, idxs):
-    random.shuffle(idxs)
+def subset(Xss, yss, idxs, rs, shuffle=True):
+    if shuffle:
+        rs.shuffle(idxs)
+        print 'Train IDXS', idxs[:10], '...'
+
     tXss = [Xss[i] for i in idxs]
     tyss = [yss[i] for i in idxs]
     return tXss, tyss
@@ -172,12 +181,15 @@ def main(fn, outf):
         yss.append(ys)
         ryss.append([proc.encode_target(ys, i) for i in xrange(len(ys))])
 
+    rs = np.random.RandomState(seed=2016)
     print "Starting KFolding"
     y_trues, y_preds = [], []
-    for train_idx, test_idx in KFold(len(data), 3, random_state=1):
-        tr_X, tr_y = subset(data, yss, train_idx)
+    for train_idx, test_idx in KFold(len(data), 8, random_state=1):
+        tr_X, tr_y = subset(data, yss, train_idx, rs)
+        test_data = subset(data, yss, test_idx, rs, False)
+
         print "Training"
-        d = Dagger(proc, tr_X, tr_y)
+        d = Dagger(proc, tr_X, tr_y, validation_set=test_data)
         clf = d.train(10)
 
         seq = Sequencer(proc, clf)
@@ -194,7 +206,7 @@ def main(fn, outf):
 
     print "Training all"
     idxs = range(len(data))
-    tr_X, tr_y = subset(data, yss, idxs)
+    tr_X, tr_y = subset(data, yss, idxs, rs)
     d = Dagger(proc, tr_X, tr_y)
     clf = d.train()
     seq = Sequencer(proc, clf)

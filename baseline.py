@@ -14,8 +14,11 @@ from sklearn.cross_validation import KFold, ShuffleSplit
 
 from utils import *
 
-def build(Xs, ys, idxs):
-    random.shuffle(idxs)
+def build(Xs, ys, idxs, rs):
+    rs.shuffle(idxs)
+
+    print 'Train IDXS', idxs[:10], '...'
+
     X, y = [], []
     for idx in idxs:
         X.extend(Xs[idx])
@@ -24,7 +27,7 @@ def build(Xs, ys, idxs):
     return sp.vstack(X), np.vstack(y)
 
 def train(X, y):
-    clf = SGDClassifier(loss="hinge", penalty="l2", n_iter=5)
+    clf = SGDClassifier(loss="hinge", penalty="l2", n_iter=10)
     #clf = LinearSVC(penalty="l2", class_weight='auto')
     clf.fit(X, y.ravel())
     return clf
@@ -54,9 +57,11 @@ def main(fn, sp):
         ys.append(y)
 
     print "Starting KFolding"
+    rs = np.random.RandomState(seed=2016)
     y_trues, y_preds = [], []
-    for train_idx, test_idx in KFold(len(data), 3, random_state=1):
-        tr_X, tr_y = build(Xs, ys, train_idx)
+    for train_idx, test_idx in KFold(len(data), 8, random_state=1):
+        tr_X, tr_y = build(Xs, ys, train_idx, rs)
+
         print "Training"
         clf = train(tr_X, tr_y)
 
@@ -74,7 +79,7 @@ def main(fn, sp):
 
     print "Training all"
     idxs = range(len(Xs))
-    tr_X, tr_y = build(Xs, ys, idxs)
+    tr_X, tr_y = build(Xs, ys, idxs, rs)
     clf = train(tr_X, tr_y)
     seq = Sequencer(proc, clf)
 
