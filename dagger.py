@@ -14,149 +14,101 @@ from sklearn.cross_validation import KFold, ShuffleSplit
 
 from utils import *
 
-def generate(seq, y_set, exp, sequencer):
-    """
-    Generates a new tradjectory.
-    """
-    # copy orig seq
-    trad = []
+class Dagger(object):
+    def __init__(self, Xss, yss, proc):
+        self.Xss = Xss
+        self.yss = yss
+        self.seen_states = set()
+        self.state_set = []
+        self.proc = proc
 
-    for i in xrange(len(seq)):
-        if random.random() < exp:
-            # Oracle
-            output = y_set[i]
-        else:
-            # Policy
-            output = sequencer._partial_pred(seq, trad, i)
+    def generate(self, Xs, ys, exp, sequencer):
+        """
+        Generates a new tradjectory.
+        """
+        # copy orig seq
+        trad = []
 
-        trad.append(output)
+        for i in xrange(len(Xs)):
+            if random.random() < exp:
+                # Oracle
+                output = ys[i]
+            else:
+                # Policy
+                output = sequencer._partial_pred(Xs, trad, i)
 
-    return trad
+            trad.append(output)
 
-import pprint
-def gen_dataset(Xss, yss, proc, clf, epoch):
-    sequencer = Sequencer(proc, clf)
+        return trad
 
-    # Generate new dataset
-    nX, nY, trads = [], [], []
-    for Xs, ys in izip(Xss, yss):
-        # build tradjectory
-        trad = generate(Xs, ys, 1 if epoch == 0 else 0, sequencer)
-        # If different than the input, add it
-        if any(y != t for y, t in izip(ys, trad)):
-            nX.append(Xs)
-            nY.append(ys)
-            trads.append(trad)
-            pprint.pprint(zip([X['feature'] for X in Xs], ys, trad))
-
-    return nX, nY, trads
-
-def key(X, y):
-    idxs = tuple(X.nonzero()[1].tolist())
-    vs = tuple(X[0, i] for i in idxs)
-    return (idxs, vs, y)
-
-def train(Xss, yss, proc, epochs=30):
-    cache = {}
-
-    # Make copies for convenience
-    nXss = Xss[:]
-    nyss = yss[:]
-    ntradss = yss[:]
-
-    # Initial policy just mimics the expert
-    clf, uniques = train_model(Xss, yss, yss, proc, cache)
-
-    for i in xrange(1, epochs):
-        sequencer = Sequencer(proc, clf)
+    def gen_dataset(self, clf, epoch):
+        sequencer = Sequencer(self.proc, clf)
 
         # Generate new dataset
-        print "Generating new dataset"
-        nX, nY, nT = gen_dataset(Xss, yss, proc, clf, i)
-        nXss.extend(nX)
-        nyss.extend(nY)
-        ntradss.extend(nT)
+        for Xs, ys in izip(self.Xss, self.yss):
+            # build tradjectory
+            trad = self.generate(Xs, ys, 1 if epoch == 0 else 0, sequencer)
+            # If different than the input, add it
+            if any(y != t for y, t in izip(ys, trad)):
+                self.add_sequence(Xs, ys, trad)
+                #pprint.pprint(zip([X['feature'] for X in Xs], ys, trad))
 
-        # Retrain
-        print "Retraining"
-        oUnique = uniques
-        clf, uniques = train_model(nXss, nyss, ntradss, proc, cache)
+    def add_sequence(self, Xs, ys, trads, force=False):
+        for i in xrange(len(Xs)):
+            state = self.get_state(Xs, trads, i)
+            if state not in self.seen_states or force:
+                X = self.proc.transform(Xs, trads, i)
+                y = self.proc.encode_target(ys, i)[0]
+                self.state_set.append((X, y))
+                self.seen_states.add(state)
 
-        # No new data - exit
-        if oUnique == uniques:
-            break
+    def get_state(self, Xs, trad, idx):
+        return ' '.join(self.proc.state(Xs, trad, idx))
 
-    return clf
+    def train(self, epochs=30):
 
-def cache_key(Xs, ys, trads):
-    f = tuple(x['feature'] for x in Xs)
-    return (f, tuple(ys), tuple(trads))
+        # Add to the initial set
+        states = 0
+        for Xs, ys in izip(self.Xss, self.yss):
+            states += len(ys)
+            self.add_sequence(Xs, ys, ys, force=True)
 
-def build_training_data(Xss, yss, tradss, proc, cache):
-    seen = set()
-    n = c = 0
-    print "Cache size:", len(cache), len(Xss)
-    for cidx, (Xs, ys, trads) in enumerate(izip(Xss, yss, tradss)):
-        n += 1
+        print len(self.state_set), "unique,", states, "total"
+        
+        # Initial policy just mimics the expert
+        clf = self.train_model()
 
-        # Don't judge me
-        if cidx in cache:
-            v = cache[cidx]
-        else:
-            ci = cache_key(Xs, ys, trads)
-            err_idxs = {i for i, y, t in izip(xrange(len(ys)), ys, trads) if y != t}
-            if ci not in cache:
-                c += 1
-                feats, targets = [], []
-                for i in xrange(len(Xs)):
-                    verbose = bool(err_idxs)
-                    X = proc.transform(Xs, trads, i, verbose=verbose)
-                    if verbose:
-                        print ys[i]
+        for e in xrange(1, epochs):
 
-                    feats.append(X)
-                    targets.append(proc.encode_target(ys, i)[0])
-                
-                cache[ci] = (feats, targets)
-                cache[cidx] = (feats, targets)
+            # Generate new dataset
+            print "Generating new dataset"
+            dataSize = len(self.state_set)
+            self.gen_dataset(clf, e)
 
-            v = cache[ci]
+            if dataSize == len(self.state_set):
+                break
 
+            # Retrain
+            print "Training"
+            clf = self.train_model()
 
-        # Positive means unique to this point
-        for si, (X, y) in enumerate(izip(*v)):
-            skey = (cidx, si)
-            if skey in cache:
-                unique, hkey = cache[skey]
-                if unique:
-                    yield X, y
-                    seen.add(hkey)
-            else:
-                k = key(X, y)
-                unique = k not in seen
-                if unique:
-                    seen.add(k)
-                    yield X, y
+        return clf
 
-                cache[skey] = (unique, k)
+    def train_model(self):
+        print "Featurizing..."
+        tX, tY = [], []
+        for X, y in self.state_set:
+            tX.append(X)
+            tY.append(y)
 
-    print "Cache Hit:", (n - c) / float(n)
+        tX, tY = sp.vstack(tX), np.vstack(tY)
 
-def train_model(Xss, yss, trads, proc, cache):
-    print "Featurizing..."
-    tX, tY = [], []
-    for X, y in build_training_data(Xss, yss, trads, proc, cache):
-        tX.append(X)
-        tY.append(y)
-
-    tX, tY = sp.vstack(tX), np.vstack(tY)
-
-    print "Running learner..."
-    #clf = SGDClassifier(loss="hinge", penalty="l2", n_iter=30)
-    clf = LinearSVC()
-    print tX.shape, tY.shape
-    clf.fit(tX, tY.ravel())
-    return clf, tX.shape[0]
+        print "Running learner..."
+        #clf = SGDClassifier(loss="hinge", penalty="l2", n_iter=30)
+        clf = LinearSVC(penalty='l2')
+        print "Samples:", tX.shape[0]
+        clf.fit(tX, tY.ravel())
+        return clf
 
 def subset(Xss, yss, idxs):
     random.shuffle(idxs)
@@ -169,7 +121,7 @@ def main(fn, outf):
     data, classes = readDataset(fn)
     print len(data), " sequences found"
     print "Found classes:", sorted(classes)
-    proc = Processor(classes, 3, 1, features=10000, stem=False, ohe=False)
+    proc = Processor(classes, 3, 1, features=100000, stem=False, ohe=False)
 
     yss = []
     ryss = []
@@ -183,7 +135,8 @@ def main(fn, outf):
     for train_idx, test_idx in KFold(len(data), 5, random_state=1):
         tr_X, tr_y = subset(data, yss, train_idx)
         print "Training"
-        clf = train(tr_X, tr_y, proc)
+        d = Dagger(tr_X, tr_y, proc)
+        clf = d.train(10)
 
         seq = Sequencer(proc, clf)
 
@@ -200,7 +153,8 @@ def main(fn, outf):
     print "Training all"
     idxs = range(len(data))
     tr_X, tr_y = subset(data, yss, idxs)
-    clf = train(tr_X, tr_y, proc)
+    d = Dagger(tr_X, tr_y, proc)
+    clf = d.train()
     seq = Sequencer(proc, clf)
 
     print "Testing"

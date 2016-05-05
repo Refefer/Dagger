@@ -58,27 +58,7 @@ class Processor(object):
         return ret
 
     def transform(self, sequence, trad, idx, verbose=False):
-        features = []
-
-        # Print previous featues
-        start = {'feature': '_START_'}
-        for i, pidx in enumerate(xrange(idx - self.previous, idx)):
-            if pidx < 0:
-                f, o = start, 'None'
-            else:
-                f, o = sequence[pidx], trad[pidx]
-
-            features.extend(self._get_feat('p_feat_%s:%%s' % i,  f))
-            features.append('p_pred_%s:%s' % (i, o))
-
-        # Print following featues
-        until = idx + self.following + 1
-        for i, fidx in enumerate(xrange(idx + 1, until)):
-            f = {'feature': "_END_"} if fidx >= len(sequence) else sequence[fidx]
-            features.extend(self._get_feat('f_feat_%s:%%s' % i,  f))
-
-        # Print current features
-        features.extend(self._get_feat('feat:%s', sequence[idx]))
+        features = self.state(sequence, trad, idx)
 
         if verbose:
             print features
@@ -94,6 +74,31 @@ class Processor(object):
                           shape=(1, self.features))
         X.sum_duplicates()
         return X
+
+    def state(self, Xs, trad, idx):
+        features = []
+
+        # Print previous featues
+        start = {'feature': '_START_'}
+        for i, pidx in enumerate(xrange(idx - self.previous, idx)):
+            if pidx < 0:
+                f, o = start, 'None'
+            else:
+                f, o = Xs[pidx], trad[pidx]
+
+            features.extend(self._get_feat('p_feat_%s:%%s' % i,  f))
+            features.append('p_pred_%s:%s' % (i, o))
+
+        # Print following featues
+        until = idx + self.following + 1
+        for i, fidx in enumerate(xrange(idx + 1, until)):
+            f = {'feature': "_END_"} if fidx >= len(Xs) else Xs[fidx]
+            features.extend(self._get_feat('f_feat_%s:%%s' % i,  f))
+
+        # Print current features
+        features.extend(self._get_feat('feat:%s', Xs[idx]))
+
+        return features
 
     def encode_target(self, ys, idx):
         y = ys[idx]

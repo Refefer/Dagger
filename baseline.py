@@ -24,8 +24,8 @@ def build(Xs, ys, idxs):
     return sp.vstack(X), np.vstack(y)
 
 def train(X, y):
-    clf = SGDClassifier(loss="hinge", penalty="l2", n_iter=30)
-    #clf = LinearSVC(penalty="l2")
+    #clf = SGDClassifier(loss="hinge", penalty="l2", n_iter=30)
+    clf = LinearSVC(penalty="l2")
     clf.fit(X, y.ravel())
     return clf
 
