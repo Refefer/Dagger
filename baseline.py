@@ -77,10 +77,6 @@ def main(fn, sp):
     clf = train(tr_X, tr_y)
     seq = Sequencer(proc, clf)
 
-    print "Testing"
-    y_true, y_pred = test(data, ys, idxs, seq)
-    #print classification_report(y_true, y_pred, target_names=proc.labels, digits=4)
-
     save(sp, seq)
 
 if __name__ == '__main__':

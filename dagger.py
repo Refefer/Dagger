@@ -157,10 +157,6 @@ def main(fn, outf):
     clf = d.train()
     seq = Sequencer(proc, clf)
 
-    print "Testing"
-    y_true, y_pred = test(data, ryss, idxs, seq)
-    #print classification_report(y_true, y_pred, target_names=proc.labels, digits=4)
-
     save(outf, seq)
 
 if __name__ == '__main__':
