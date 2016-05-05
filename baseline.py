@@ -1,3 +1,4 @@
+import time
 import random
 import sys
 
@@ -9,7 +10,7 @@ from sklearn.linear_model import SGDClassifier
 from sklearn.svm import LinearSVC
 
 from sklearn.metrics import classification_report
-from sklearn.cross_validation import KFold
+from sklearn.cross_validation import KFold, ShuffleSplit
 
 from utils import *
 
@@ -23,8 +24,8 @@ def build(Xs, ys, idxs):
     return sp.vstack(X), np.vstack(y)
 
 def train(X, y):
-    #clf = SGDClassifier(loss="hinge", penalty="l2", n_iter=5)
-    clf = LinearSVC(penalty="l2", verbose=2)
+    clf = SGDClassifier(loss="hinge", penalty="l2", n_iter=30)
+    #clf = LinearSVC(penalty="l2")
     clf.fit(X, y.ravel())
     return clf
 
@@ -33,13 +34,14 @@ def main(fn, sp):
     data, classes = readDataset(fn)
     print len(data), " sequences found"
     print "Found classes:", sorted(classes)
-    proc = Processor(classes, 2, 2, features=100000, stem=False, ohe=False)
+    proc = Processor(classes, 3, 1, features=100000, stem=False, ohe=False)
 
     print "Converting to features"
     Xs, ys = [], []
+    sTime = time.time()
     for i, d in enumerate(data):
-        if i % 100 == 0:
-            print "Converted %s of %s" % (i, len(data))
+        if i % 100 == 0 and i:
+            print "Converted %s of %s: %s DPS" % (i, len(data), i / (time.time() - sTime))
 
         X, y = [], []
         trad = [x['output'] for x in d]
@@ -52,7 +54,7 @@ def main(fn, sp):
 
     print "Starting KFolding"
     y_trues, y_preds = [], []
-    for train_idx, test_idx in KFold(len(data), 3, random_state=1):
+    for train_idx, test_idx in KFold(len(data), 5, random_state=1):
         tr_X, tr_y = build(Xs, ys, train_idx)
         print "Training"
         clf = train(tr_X, tr_y)
@@ -77,7 +79,7 @@ def main(fn, sp):
 
     print "Testing"
     y_true, y_pred = test(data, ys, idxs, seq)
-    print classification_report(y_true, y_pred, target_names=proc.labels)
+    #print classification_report(y_true, y_pred, target_names=proc.labels, digits=4)
 
     save(sp, seq)
 

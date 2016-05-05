@@ -7,10 +7,10 @@ import numpy as np
 import scipy.sparse as sp
 
 from sklearn.linear_model import SGDClassifier
-from sklearn.svm import LinearSVC
+from sklearn.svm import LinearSVC, SVC
 
 from sklearn.metrics import classification_report
-from sklearn.cross_validation import KFold
+from sklearn.cross_validation import KFold, ShuffleSplit
 
 from utils import *
 
@@ -41,14 +41,13 @@ def gen_dataset(Xss, yss, proc, clf, epoch):
     nX, nY, trads = [], [], []
     for Xs, ys in izip(Xss, yss):
         # build tradjectory
-        #trad = generate(Xs, ys, .95 ** epoch, sequencer)
         trad = generate(Xs, ys, 1 if epoch == 0 else 0, sequencer)
         # If different than the input, add it
         if any(y != t for y, t in izip(ys, trad)):
             nX.append(Xs)
             nY.append(ys)
             trads.append(trad)
-            #pprint.pprint(zip([X['feature'] for X in Xs], ys, trad))
+            pprint.pprint(zip([X['feature'] for X in Xs], ys, trad))
 
     return nX, nY, trads
 
@@ -105,11 +104,16 @@ def build_training_data(Xss, yss, tradss, proc, cache):
             v = cache[cidx]
         else:
             ci = cache_key(Xs, ys, trads)
+            err_idxs = {i for i, y, t in izip(xrange(len(ys)), ys, trads) if y != t}
             if ci not in cache:
                 c += 1
                 feats, targets = [], []
                 for i in xrange(len(Xs)):
-                    X = proc.transform(Xs, trads, i)
+                    verbose = bool(err_idxs)
+                    X = proc.transform(Xs, trads, i, verbose=verbose)
+                    if verbose:
+                        print ys[i]
+
                     feats.append(X)
                     targets.append(proc.encode_target(ys, i)[0])
                 
@@ -117,6 +121,7 @@ def build_training_data(Xss, yss, tradss, proc, cache):
                 cache[cidx] = (feats, targets)
 
             v = cache[ci]
+
 
         # Positive means unique to this point
         for si, (X, y) in enumerate(izip(*v)):
@@ -147,8 +152,8 @@ def train_model(Xss, yss, trads, proc, cache):
     tX, tY = sp.vstack(tX), np.vstack(tY)
 
     print "Running learner..."
-    clf = SGDClassifier(loss="hinge", penalty="l2", n_iter=1)
-    #clf = LinearSVC()
+    #clf = SGDClassifier(loss="hinge", penalty="l2", n_iter=30)
+    clf = LinearSVC()
     print tX.shape, tY.shape
     clf.fit(tX, tY.ravel())
     return clf, tX.shape[0]
@@ -164,7 +169,7 @@ def main(fn, outf):
     data, classes = readDataset(fn)
     print len(data), " sequences found"
     print "Found classes:", sorted(classes)
-    proc = Processor(classes, 2, 2, features=100000, ohe=False)
+    proc = Processor(classes, 3, 1, features=10000, stem=False, ohe=False)
 
     yss = []
     ryss = []
@@ -175,7 +180,7 @@ def main(fn, outf):
 
     print "Starting KFolding"
     y_trues, y_preds = [], []
-    for train_idx, test_idx in KFold(len(data), 3, random_state=1):
+    for train_idx, test_idx in KFold(len(data), 5, random_state=1):
         tr_X, tr_y = subset(data, yss, train_idx)
         print "Training"
         clf = train(tr_X, tr_y, proc)
@@ -200,7 +205,7 @@ def main(fn, outf):
 
     print "Testing"
     y_true, y_pred = test(data, ryss, idxs, seq)
-    print classification_report(y_true, y_pred, target_names=proc.labels)
+    #print classification_report(y_true, y_pred, target_names=proc.labels, digits=4)
 
     save(outf, seq)
 

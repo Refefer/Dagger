@@ -1,10 +1,13 @@
 import sys
 import numpy as np
 import cPickle
+from itertools import izip
 
 import nltk
+import scipy.sparse as sp
 
 from sklearn.feature_extraction import FeatureHasher
+import sklearn.feature_extraction._hashing as hasher 
 
 class Policy(object):
     def predict(self, data, sequence, i):
@@ -30,6 +33,7 @@ class Processor(object):
         self.following = following 
         self.stem = stem
         self.es = nltk.stem.snowball.EnglishStemmer()
+        self.features = features
         self.fh = FeatureHasher(features, input_type='string', dtype='float32')
         self.labels = list(classes)
         self.classes = {c: i for i, c in enumerate(self.labels)}
@@ -79,7 +83,17 @@ class Processor(object):
         if verbose:
             print features
 
-        return self.fh.transform([features])
+        #return self.fh.transform(features)
+        return self._hash(features)
+
+    def _hash(self, features):
+        indices, indptr, values = \
+            hasher.transform([[(x,1) for x in features]], self.features, 'float32')
+
+        X = sp.csr_matrix((values, indices, indptr), dtype='float32',
+                          shape=(1, self.features))
+        X.sum_duplicates()
+        return X
 
     def encode_target(self, ys, idx):
         y = ys[idx]
@@ -151,10 +165,23 @@ def load(path):
 
 def test(Xss, yss, test_idx, seq):
     y_true, y_pred = [], []
+    nerrors = 0.0
+    perrs = 0.0
     for idx in test_idx:
         y_true.extend(y for ys in yss[idx] for y in ys)
         preds = seq.classify(Xss[idx], raw=True)
+        
+        # Calculate errors per sequence
+        errors = sum(y[0] != t for y, t in izip(yss[idx], preds))
+        if errors > 0:
+            nerrors += 1
+            perrs += errors
+            
         y_pred.extend(preds)
 
+    print "Phrases with errors:", nerrors
+    print "Total Errors:", perrs
+    print "Errors per bad seq:", perrs / nerrors if nerrors else 0, nerrors
+    print "Phrase Accuracy:", (len(test_idx) - nerrors) / len(test_idx)
     return y_true, y_pred
 
