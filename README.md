@@ -19,7 +19,7 @@ Data
 
 While Dagger can be used for any type of structured learning task, this implementation was mostly intended for POS.  However, the amount of time to modify it for other tasks should be fairly trivial.
 
-The format is pretty simple. batches of <feature> <class>, separated by a carriage return:
+The format is pretty simple. batches of `<feature> <class>`, separated by a carriage return:
 
     the article
     quick adjective
