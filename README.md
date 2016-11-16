@@ -45,4 +45,7 @@ You can train a POS tagger fairly easily:
 
     python dagger.py <train_file> <model>
 
+HYou can compare it to a baseline easily as well:
+
+    python baseline.py <train_file> <model>
 
