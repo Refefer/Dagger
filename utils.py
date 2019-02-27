@@ -42,7 +42,7 @@ class Processor(object):
         self.fh = FeatureHasher(features, input_type='string', dtype='float32')
         self.labels = list(classes)
         self.classes = {c: i for i, c in enumerate(self.labels)}
-        self.tlabels = {i: c for c, i in self.classes.iteritems()}
+        self.tlabels = {i: c for c, i in self.classes.items()}
         self.n_classes = len(classes)
         self._nident = np.identity(self.n_classes, 'float32')
         self.to_ohe = ohe
