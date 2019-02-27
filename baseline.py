@@ -36,19 +36,19 @@ def train(X, y):
     return clf
 
 def main(fn, sp):
-    print( "Reading in dataset")
+    print("Reading in dataset")
     data, classes = readDataset(fn)
-    print( len(data), " sequences found")
+    print(len(data), " sequences found")
     print("Found classes:", sorted(classes))
     proc = Processor(classes, 2, 2, prefix=(1,3), affix=(2,1), hashes=2,
             features=100000, stem=False, ohe=False)
 
-    print( "Converting to features")
+    print("Converting to features")
     Xs, ys = [], []
     sTime = time.time()
     for i, d in enumerate(data):
         if i % 100 == 0 and i:
-            print( "Converted %s of %s: %s DPS" % (i, len(data), i / (time.time() - sTime)))
+            print("Converted %s of %s: %s DPS" % (i, len(data), i / (time.time() - sTime)))
 
         X, y = [], []
         trad = [x['output'] for x in d]
@@ -59,29 +59,29 @@ def main(fn, sp):
         Xs.append(X)
         ys.append(y)
 
-    print( "Starting KFolding")
+    print("Starting KFolding")
     rs = np.random.RandomState(seed=2016)
     y_trues, y_preds = [], []
     fold_object = KFold(5, random_state=1)
     for train_idx, test_idx in fold_object.split(data):
         tr_X, tr_y = build(Xs, ys, train_idx, rs)
 
-        print( "Training")
+        print("Training")
         clf = train(tr_X, tr_y)
 
         seq = Sequencer(proc, clf)
 
-        print( "Testing")
+        print("Testing")
         y_true, y_pred = test(data, ys, test_idx, seq)
         print( classification_report(y_true, y_pred))
 
         y_trues.extend(y_true)
         y_preds.extend(y_pred)
     
-    print( "Total Report")
+    print("Total Report")
     print( classification_report(y_trues, y_preds))
 
-    print( "Training all")
+    print("Training all")
     idxs = range(len(Xs))
     tr_X, tr_y = build(Xs, ys, idxs, rs)
     clf = train(tr_X, tr_y)

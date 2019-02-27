@@ -107,7 +107,7 @@ class Dagger(object):
             states += len(ys)
             self.add_sequence(Xs, ys, ys, force=True)
 
-        print( len(self.seen_states), "unique,", states, "total")
+        print(len(self.seen_states), "unique,", states, "total")
         
         # Initial policy just mimics the expert
         clf = self.train_model()
@@ -115,12 +115,12 @@ class Dagger(object):
         # Get best policy found so far
         bscore, bclf= self.score_policy(clf), clf
 
-        print( "Best score seen:",  bscore)
+        print("Best score seen:",  bscore)
 
         for e in range(1, epochs):
 
             # Generate new dataset
-            print( "Generating new dataset")
+            print("Generating new dataset")
             dataSize = len(self.state_set)
             self.gen_dataset(clf, e)
 
@@ -128,12 +128,12 @@ class Dagger(object):
                 break
 
             # Retrain
-            print( "Training")
+            print("Training")
             clf = self.train_model()
 
-            print( "Scoring")
+            print("Scoring")
             score = self.score_policy(clf)
-            print( "New Policy Score:",  bscore)
+            print("New Policy Score:",  bscore)
 
             if score < bscore:
                 bscore = score
@@ -142,7 +142,7 @@ class Dagger(object):
         return bclf
 
     def train_model(self):
-        print( "Featurizing...")
+        print("Featurizing...")
         tX, tY = [], []
         for X, y in self.state_set:
             tX.append(X)
@@ -150,10 +150,10 @@ class Dagger(object):
 
         tX, tY = sp.vstack(tX), np.vstack(tY)
 
-        print( "Running learner...")
+        print("Running learner...")
         clf = SGDClassifier(loss="hinge", penalty="l2", max_iter=50, tol=1e-3)
         #clf = LinearSVC(penalty="l2", class_weight='auto')
-        print( "Samples:", tX.shape[0])
+        print("Samples:", tX.shape[0])
         clf.fit(tX, tY.ravel())
         return clf
 
@@ -170,10 +170,10 @@ def subset(Xss, yss, idxs, rs, shuffle=True):
     return tXss, tyss
 
 def main(fn, output_fn):
-    print( "Reading in dataset")
+    print("Reading in dataset")
     data, classes = readDataset(fn)
-    print( len(data), " sequences found")
-    print( "Found classes:", sorted(classes))
+    print(len(data), " sequences found")
+    print("Found classes:", sorted(classes))
     proc = Processor(classes, 2, 2, prefix=(1,3), affix=(2,1), hashes=2,
             features=100000, stem=False, ohe=False)
 
@@ -185,20 +185,20 @@ def main(fn, output_fn):
         ryss.append([proc.encode_target(ys, i) for i in range(len(ys))])
 
     rs = np.random.RandomState(seed=2016)
-    print( "Starting KFolding")
+    print("Starting KFolding")
     y_trues, y_preds = [], []
     fold_object = KFold(5, random_state=1)
     for train_idx, test_idx in fold_object.split(data):
         tr_X, tr_y = subset(data, yss, train_idx, rs)
         test_data = subset(data, yss, test_idx, rs, False)
 
-        print( "Training")
+        print("Training")
         d = Dagger(proc, tr_X, tr_y, validation_set=test_data)
         clf = d.train(10)
 
         seq = Sequencer(proc, clf)
 
-        print( "Testing")
+        print("Testing")
         y_true, y_pred = test(data, ryss, test_idx, seq)
 #        print(y_true, y_pred, proc.labels)
         print( classification_report(y_true, y_pred))
@@ -206,10 +206,10 @@ def main(fn, output_fn):
         y_trues.extend(y_true)
         y_preds.extend(y_pred)
 
-    print( "Total Report")
-    print( classification_report(y_trues, y_preds, target_names=proc.labels))
+    print("Total Report")
+    print(classification_report(y_trues, y_preds, target_names=proc.labels))
 
-    print( "Training all")
+    print("Training all")
     idxs = range(len(data))
     tr_X, tr_y = subset(data, yss, idxs, rs)
     d = Dagger(proc, tr_X, tr_y)
