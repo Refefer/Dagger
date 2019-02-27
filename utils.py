@@ -1,6 +1,7 @@
 import sys
 import numpy as np
-import cPickle
+import random
+import pickle
 from itertools import izip
 
 import nltk
@@ -72,7 +73,7 @@ class Processor(object):
         features = self.state(sequence, trad, idx)
 
         if verbose:
-            print features
+            print(features)
 
         #return self.fh.transform(features)
         return self._hash(features)
@@ -91,7 +92,7 @@ class Processor(object):
 
         # Print previous featues
         start = {'feature': '_START_'}
-        for i, pidx in enumerate(xrange(idx - self.previous, idx)):
+        for i, pidx in enumerate(range(idx - self.previous, idx)):
             if pidx < 0:
                 f, o = start, 'None'
             else:
@@ -102,7 +103,7 @@ class Processor(object):
 
         # Print following featues
         until = idx + self.following + 1
-        for i, fidx in enumerate(xrange(idx + 1, until)):
+        for i, fidx in enumerate(range(idx + 1, until)):
             f = {'feature': "_END_"} if fidx >= len(Xs) else Xs[fidx]
             features.extend(self._get_feat('f_feat_%s:%%s' % i,  f))
 
@@ -111,7 +112,7 @@ class Processor(object):
 
         if self.hashes > 1:
             nhashes = features[:]
-            for i in xrange(1, self.hashes):
+            for i in range(1, self.hashes):
                 p = '!' * i
                 nhashes.extend(p+s for s in features)
 
@@ -132,7 +133,7 @@ class Sequencer(object):
 
     def classify(self, sequence, raw=False):
         outputs = []
-        for i in xrange(len(sequence)):
+        for i in range(len(sequence)):
             outputs.append(self._partial_pred(sequence, outputs, i))
 
         if raw:
@@ -149,7 +150,7 @@ def readDataset(fn):
     if fn == '-':
         f = sys.stdin
     else:
-        f = file(fn)
+        f = open(fn)
 
     def run(f):
         sequences = []
@@ -178,13 +179,13 @@ def readDataset(fn):
         if f != '-':
             f.close()
 
-def save(path, cls):
-    with file(path, 'w') as out:
-        cPickle.dump(cls, out)
+def save(path, obj):
+    with open(path, 'wb') as outFile:
+        pickle.dump(obj, outFile)
 
 def load(path):
-    with file(path) as f:
-        return cPickle.load(f)
+    with open(path) as f:
+        return pickle.load(f)
 
 def test(Xss, yss, test_idx, seq):
     y_true, y_pred = [], []
@@ -202,9 +203,9 @@ def test(Xss, yss, test_idx, seq):
             
         y_pred.extend(preds)
 
-    print "Phrases with errors:", nerrors
-    print "Total Errors:", perrs
-    print "Errors per bad seq:", perrs / nerrors if nerrors else 0, nerrors
-    print "Phrase Accuracy:", (len(test_idx) - nerrors) / len(test_idx)
+    print("Phrases with errors:", nerrors)
+    print("Total Errors:", perrs)
+    print("Errors per bad seq:", perrs / nerrors if nerrors else 0, nerrors)
+    print("Phrase Accuracy:", (len(test_idx) - nerrors) / len(test_idx))
     return y_true, y_pred
 
