@@ -2,10 +2,9 @@ import sys
 import numpy as np
 import random
 import pickle
-from itertools import izip
 
 import nltk
-import scipy.sparse as sp
+import scipy.sparse as spa
 
 from sklearn.feature_extraction import FeatureHasher
 import sklearn.feature_extraction._hashing as hasher 
@@ -82,7 +81,7 @@ class Processor(object):
         indices, indptr, values = \
             hasher.transform([[(x,1) for x in features]], self.features, 'float32')
 
-        X = sp.csr_matrix((values, indices, indptr), dtype='float32',
+        X = spa.csr_matrix((values, indices, indptr), dtype='float32',
                           shape=(1, self.features))
         X.sum_duplicates()
         return X
@@ -196,7 +195,7 @@ def test(Xss, yss, test_idx, seq):
         preds = seq.classify(Xss[idx], raw=True)
         
         # Calculate errors per sequence
-        errors = sum(y[0] != t for y, t in izip(yss[idx], preds))
+        errors = sum(y[0] != t for y, t in zip(yss[idx], preds))
         if errors > 0:
             nerrors += 1
             perrs += errors

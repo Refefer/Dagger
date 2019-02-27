@@ -3,7 +3,7 @@ import sys
 
 import numpy as np
 
-import scipy.sparse as sp
+import scipy.sparse as spa
 
 from sklearn.linear_model import SGDClassifier
 from sklearn.svm import LinearSVC, SVC
@@ -148,7 +148,7 @@ class Dagger(object):
             tX.append(X)
             tY.append(y)
 
-        tX, tY = sp.vstack(tX), np.vstack(tY)
+        tX, tY = spa.vstack(tX), np.vstack(tY)
 
         print("Running learner...")
         clf = SGDClassifier(loss="hinge", penalty="l2", max_iter=50, tol=1e-3)
