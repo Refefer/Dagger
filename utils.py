@@ -1,10 +1,10 @@
 import sys
 import numpy as np
-import cPickle
-from itertools import izip
+import random
+import pickle
 
 import nltk
-import scipy.sparse as sp
+import scipy.sparse as spa
 
 from sklearn.feature_extraction import FeatureHasher
 import sklearn.feature_extraction._hashing as hasher 
@@ -42,7 +42,7 @@ class Processor(object):
         self.fh = FeatureHasher(features, input_type='string', dtype='float32')
         self.labels = list(classes)
         self.classes = {c: i for i, c in enumerate(self.labels)}
-        self.tlabels = {i: c for c, i in self.classes.iteritems()}
+        self.tlabels = {i: c for c, i in self.classes.items()}
         self.n_classes = len(classes)
         self._nident = np.identity(self.n_classes, 'float32')
         self.to_ohe = ohe
@@ -72,7 +72,7 @@ class Processor(object):
         features = self.state(sequence, trad, idx)
 
         if verbose:
-            print features
+            print(features)
 
         #return self.fh.transform(features)
         return self._hash(features)
@@ -81,7 +81,7 @@ class Processor(object):
         indices, indptr, values = \
             hasher.transform([[(x,1) for x in features]], self.features, 'float32')
 
-        X = sp.csr_matrix((values, indices, indptr), dtype='float32',
+        X = spa.csr_matrix((values, indices, indptr), dtype='float32',
                           shape=(1, self.features))
         X.sum_duplicates()
         return X
@@ -91,7 +91,7 @@ class Processor(object):
 
         # Print previous featues
         start = {'feature': '_START_'}
-        for i, pidx in enumerate(xrange(idx - self.previous, idx)):
+        for i, pidx in enumerate(range(idx - self.previous, idx)):
             if pidx < 0:
                 f, o = start, 'None'
             else:
@@ -102,7 +102,7 @@ class Processor(object):
 
         # Print following featues
         until = idx + self.following + 1
-        for i, fidx in enumerate(xrange(idx + 1, until)):
+        for i, fidx in enumerate(range(idx + 1, until)):
             f = {'feature': "_END_"} if fidx >= len(Xs) else Xs[fidx]
             features.extend(self._get_feat('f_feat_%s:%%s' % i,  f))
 
@@ -111,7 +111,7 @@ class Processor(object):
 
         if self.hashes > 1:
             nhashes = features[:]
-            for i in xrange(1, self.hashes):
+            for i in range(1, self.hashes):
                 p = '!' * i
                 nhashes.extend(p+s for s in features)
 
@@ -132,7 +132,7 @@ class Sequencer(object):
 
     def classify(self, sequence, raw=False):
         outputs = []
-        for i in xrange(len(sequence)):
+        for i in range(len(sequence)):
             outputs.append(self._partial_pred(sequence, outputs, i))
 
         if raw:
@@ -149,7 +149,7 @@ def readDataset(fn):
     if fn == '-':
         f = sys.stdin
     else:
-        f = file(fn)
+        f = open(fn)
 
     def run(f):
         sequences = []
@@ -178,13 +178,13 @@ def readDataset(fn):
         if f != '-':
             f.close()
 
-def save(path, cls):
-    with file(path, 'w') as out:
-        cPickle.dump(cls, out)
+def save(path, obj):
+    with open(path, 'wb') as outFile:
+        pickle.dump(obj, outFile)
 
 def load(path):
-    with file(path) as f:
-        return cPickle.load(f)
+    with open(path) as f:
+        return pickle.load(f)
 
 def test(Xss, yss, test_idx, seq):
     y_true, y_pred = [], []
@@ -195,16 +195,16 @@ def test(Xss, yss, test_idx, seq):
         preds = seq.classify(Xss[idx], raw=True)
         
         # Calculate errors per sequence
-        errors = sum(y[0] != t for y, t in izip(yss[idx], preds))
+        errors = sum(y[0] != t for y, t in zip(yss[idx], preds))
         if errors > 0:
             nerrors += 1
             perrs += errors
             
         y_pred.extend(preds)
 
-    print "Phrases with errors:", nerrors
-    print "Total Errors:", perrs
-    print "Errors per bad seq:", perrs / nerrors if nerrors else 0, nerrors
-    print "Phrase Accuracy:", (len(test_idx) - nerrors) / len(test_idx)
+    print("Phrases with errors:", nerrors)
+    print("Total Errors:", perrs)
+    print("Errors per bad seq:", perrs / nerrors if nerrors else 0, nerrors)
+    print("Phrase Accuracy:", (len(test_idx) - nerrors) / len(test_idx))
     return y_true, y_pred
 
